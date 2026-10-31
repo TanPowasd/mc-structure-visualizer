@@ -42,6 +42,10 @@ export class StructureViewportController {
   private gridGroup = new THREE.Group();
   private overlayGroup: THREE.Group | null = null;
   private hoverOutline: THREE.LineSegments;
+  private previewCube: THREE.Mesh;
+  private previewEdges: THREE.LineSegments;
+  private selectionBox: THREE.LineSegments;
+  private selectionFill: THREE.Mesh;
 
   private activeMode: ViewportProjectionMode = '3d_perspective';
   private showTechnicalOverlay = true;
@@ -67,7 +71,7 @@ export class StructureViewportController {
       preserveDrawingBuffer: true
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.setClearColor(0x0c1017, 1);
+    this.renderer.setClearColor(0x222222, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.container.appendChild(this.renderer.domElement);
 
@@ -90,10 +94,38 @@ export class StructureViewportController {
     const boxGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.015, 1.015, 1.015));
     this.hoverOutline = new THREE.LineSegments(
       boxGeom,
-      new THREE.LineBasicMaterial({ color: 0x38bdf8 })
+      new THREE.LineBasicMaterial({ color: 0xe0b060 })
     );
     this.hoverOutline.visible = false;
     this.scene.add(this.hoverOutline);
+
+    // Tool preview: a translucent cube where the next block would land (or an outline for erase)
+    this.previewCube = new THREE.Mesh(
+      new THREE.BoxGeometry(1.002, 1.002, 1.002),
+      new THREE.MeshBasicMaterial({ color: 0xe0b060, transparent: true, opacity: 0.18, depthWrite: false })
+    );
+    this.previewEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1.01, 1.01, 1.01)),
+      new THREE.LineBasicMaterial({ color: 0xe0b060 })
+    );
+    this.previewCube.visible = false;
+    this.previewEdges.visible = false;
+    this.previewCube.renderOrder = 10;
+    this.scene.add(this.previewCube, this.previewEdges);
+
+    // Box selection
+    this.selectionBox = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+      new THREE.LineBasicMaterial({ color: 0xd6a14f })
+    );
+    this.selectionFill = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: 0xc8913f, transparent: true, opacity: 0.08, depthWrite: false })
+    );
+    this.selectionBox.visible = false;
+    this.selectionFill.visible = false;
+    this.selectionFill.renderOrder = 9;
+    this.scene.add(this.selectionBox, this.selectionFill);
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
     this.resizeObserver.observe(container);
@@ -193,6 +225,74 @@ export class StructureViewportController {
     }
     this.hoverOutline.position.set(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5);
     this.hoverOutline.visible = true;
+  }
+
+  /**
+   * Shows where the active tool will act. `kind` 'place' draws a translucent cube,
+   * 'target' only an outline (erase / replace / select). Pass null to hide.
+   */
+  setToolPreview(pos: Vec3 | null, kind: 'place' | 'target' | 'danger' = 'place'): void {
+    if (!pos) {
+      this.previewCube.visible = false;
+      this.previewEdges.visible = false;
+      return;
+    }
+    const color = kind === 'danger' ? 0xcc6b5e : 0xe0b060;
+    (this.previewEdges.material as THREE.LineBasicMaterial).color.setHex(color);
+    (this.previewCube.material as THREE.MeshBasicMaterial).color.setHex(color);
+    this.previewEdges.position.set(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5);
+    this.previewCube.position.copy(this.previewEdges.position);
+    this.previewEdges.visible = true;
+    this.previewCube.visible = kind === 'place';
+  }
+
+  /** Draws the inclusive selection box, or hides it when null. */
+  setSelectionBox(box: { min: Vec3; max: Vec3 } | null): void {
+    if (!box) {
+      this.selectionBox.visible = false;
+      this.selectionFill.visible = false;
+      return;
+    }
+    const sx = box.max.x - box.min.x + 1;
+    const sy = box.max.y - box.min.y + 1;
+    const sz = box.max.z - box.min.z + 1;
+    for (const obj of [this.selectionBox, this.selectionFill]) {
+      obj.scale.set(sx + 0.02, sy + 0.02, sz + 0.02);
+      obj.position.set(box.min.x + sx / 2, box.min.y + sy / 2, box.min.z + sz / 2);
+      obj.visible = true;
+    }
+  }
+
+  /** Moves the camera with the structure after the canvas grew on its negative sides. */
+  shiftView(delta: Vec3): void {
+    if (delta.x === 0 && delta.y === 0 && delta.z === 0) return;
+    const d = new THREE.Vector3(delta.x, delta.y, delta.z);
+    this.perspCamera.position.add(d);
+    this.orthoCamera.position.add(d);
+    this.controls.target.add(d);
+    this.controls.update();
+  }
+
+  /**
+   * Cell on the ground plane (y = 0) under the cursor, inside the canvas footprint.
+   * Lets people start building on an empty canvas where no block can be hit.
+   */
+  pickFloorCell(clientX: number, clientY: number): Vec3 | null {
+    const reg = this.currentRegion;
+    if (!reg) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.activeCamera);
+    const hit = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
+    const x = Math.floor(hit.x);
+    const z = Math.floor(hit.z);
+    if (x < 0 || z < 0 || x >= reg.size.x || z >= reg.size.z) return null;
+    return { x, y: 0, z };
   }
 
   async loadAndRender(
@@ -405,13 +505,13 @@ export class StructureViewportController {
     const maxHoriz = Math.ceil(Math.max(size.x, size.z, 16) / 16) * 16;
 
     // 1x1 block grid
-    const blockGrid = new THREE.GridHelper(maxHoriz, maxHoriz, 0x263244, 0x18202c);
+    const blockGrid = new THREE.GridHelper(maxHoriz, maxHoriz, 0x333333, 0x2a2a2a);
     blockGrid.position.set(maxHoriz / 2, -0.005, maxHoriz / 2);
     this.gridGroup.add(blockGrid);
 
-    // 16x16 Minecraft Chunk Boundary grid (gold/amber engineering lines)
+    // 16x16 Minecraft Chunk Boundary grid (muted brass lines)
     const chunkDivs = Math.max(1, maxHoriz / 16);
-    const chunkGrid = new THREE.GridHelper(maxHoriz, chunkDivs, 0x3b82f6, 0xd97706);
+    const chunkGrid = new THREE.GridHelper(maxHoriz, chunkDivs, 0x5c5c5c, 0x6e5734);
     chunkGrid.position.set(maxHoriz / 2, 0.002, maxHoriz / 2);
     this.gridGroup.add(chunkGrid);
 
@@ -419,7 +519,7 @@ export class StructureViewportController {
     const boundsBox = new THREE.BoxGeometry(size.x, size.y, size.z);
     const boundsEdges = new THREE.LineSegments(
       new THREE.EdgesGeometry(boundsBox),
-      new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.65 })
+      new THREE.LineBasicMaterial({ color: 0x5a5a5a, transparent: true, opacity: 0.7 })
     );
     boundsEdges.position.set(size.x / 2, size.y / 2, size.z / 2);
     this.gridGroup.add(boundsEdges);

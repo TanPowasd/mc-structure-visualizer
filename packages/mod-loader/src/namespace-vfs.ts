@@ -374,6 +374,13 @@ export class NamespaceVirtualFS {
     return norm;
   }
 
+  /** Every block id in the active vanilla registry, with its display names (for block pickers). */
+  listRegistryBlocks(): Array<{ id: string; nameEn: string; nameZh: string }> {
+    const reg = this.getActiveVanillaBundle()?.blocksRegistry;
+    if (!reg) return [];
+    return Object.entries(reg).map(([id, meta]) => ({ id, nameEn: meta.nameEn, nameZh: meta.nameZh }));
+  }
+
   getBlockRegistryMeta(blockId: string): BlockRegistryMeta | undefined {
     return this.getActiveVanillaBundle()?.blocksRegistry[normalizeNamespace(blockId)];
   }

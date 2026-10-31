@@ -210,18 +210,38 @@ export function resolveExportFormat(raw: string): ExportableFormatId {
   }
 }
 
+export interface SerializeOptions {
+  /**
+   * Air culling on export. Sparse formats (.nbt, F3+I commands, Building Gadgets) drop air
+   * voxels entirely so a paste never overwrites terrain; dense formats keep their grid but
+   * get cave_air / void_air normalised to plain air.
+   */
+  skipAir?: boolean;
+}
+
+/** Formats where `skipAir` removes air from the file (paste leaves terrain untouched). */
+export const AIR_CULLING_SPARSE_FORMATS: ReadonlySet<ExportableFormatId> = new Set<ExportableFormatId>([
+  'nbt',
+  'f3i_command',
+  'building_gadgets_v2'
+]);
+
 export function serializeStructure(
   ir: UniversalStructureIR,
-  format: ExportableFormatId | string
+  format: ExportableFormatId | string,
+  opts: SerializeOptions = {}
 ): Uint8Array | string {
   const resolved = resolveExportFormat(String(format));
+  if (opts.skipAir) {
+    ir = normalizeAirVariants(ir);
+  }
   switch (resolved) {
     case 'litematic':
       return writeLitematic(ir);
     case 'schem':
       return writeSchem(ir);
     case 'nbt':
-      return writeVanillaNbt(ir);
+      return writeVanillaNbt(ir, { skipAir: opts.skipAir });
     case 'building_gadgets_v2':
       return writeBuildingGadgetsV2(ir);
     case 'axiom_bp':
@@ -231,4 +251,22 @@ export function serializeStructure(
     case 'f3i_command':
       return exportAsSetblockCommands(ir);
   }
+}
+
+/** Returns a copy whose cave_air / void_air palette entries are rewritten to minecraft:air. */
+function normalizeAirVariants(ir: UniversalStructureIR): UniversalStructureIR {
+  let touched = false;
+  const regions = ir.regions.map((r) => {
+    if (!r.palette.some((p) => p.name === 'minecraft:cave_air' || p.name === 'minecraft:void_air')) return r;
+    touched = true;
+    return {
+      ...r,
+      palette: r.palette.map((p) =>
+        p.name === 'minecraft:cave_air' || p.name === 'minecraft:void_air'
+          ? { name: 'minecraft:air', properties: {} }
+          : p
+      )
+    };
+  });
+  return touched ? { ...ir, regions } : ir;
 }

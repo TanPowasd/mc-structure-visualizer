@@ -183,8 +183,21 @@ export function parseVanillaOrCreateNbt(data: Uint8Array, nameHint = 'Structure'
   return ir;
 }
 
-export function writeVanillaNbt(ir: UniversalStructureIR): Uint8Array {
+export interface VanillaNbtWriteOptions {
+  /**
+   * Omit every air-like voxel (air / cave_air / void_air / structure_void). In a vanilla
+   * structure file an omitted position behaves like structure_void: pasting leaves the
+   * world block there untouched instead of carving it out.
+   */
+  skipAir?: boolean;
+}
+
+export function writeVanillaNbt(ir: UniversalStructureIR, opts: VanillaNbtWriteOptions = {}): Uint8Array {
   const reg = mergeRegionsToSingle(ir);
+  const airIdx = new Set<number>();
+  reg.palette.forEach((p, i) => {
+    if (isAirBlock(p.name)) airIdx.add(i);
+  });
 
   const paletteNbt = nbtList(
     NbtTagType.Compound,
@@ -197,6 +210,7 @@ export function writeVanillaNbt(ir: UniversalStructureIR): Uint8Array {
       for (let x = 0; x < reg.size.x; x++) {
         const stateIdx = reg.blocks[voxelIndex(x, y, z, reg.size)]!;
         // Include non-air blocks (and air if structure is tiny or Create schematic expects full bounding volume)
+        if (opts.skipAir && airIdx.has(stateIdx)) continue;
         if (stateIdx === 0 && reg.size.x * reg.size.y * reg.size.z > 4096) continue;
         const fields: Record<string, NbtTag> = {
           pos: nbtList(NbtTagType.Int, [nbtInt(x), nbtInt(y), nbtInt(z)]),
