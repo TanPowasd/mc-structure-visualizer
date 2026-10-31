@@ -1,0 +1,23 @@
+# Dependencies & Build outputs
+node_modules/
+dist/
+build/
+target/
+*.tsbuildinfo
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# MC Environment Caches & Extracted Assets (Mojang & Mod JAR EULA/Copyright safe)
+mc-env/.cache/
+mc-env/assets/extracted/
+mc-env/assets/bundle/
+mc-env/assets/mods-bundle/
+
+# Local MC Test Server Runtime Directories (multi-version / multi-loader)
+mc-env/servers/*/
+!mc-env/servers/.gitkeep

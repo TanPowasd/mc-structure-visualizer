@@ -1,0 +1,40 @@
+{
+  "name": "mc-structure-visualizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Universal Multi-Version (1.20.1 / 1.21.x) & Multi-Loader (Forge / NeoForge / Fabric / Quilt) Minecraft Structure Visualizer for Desktop & Web",
+  "scripts": {
+    "dev": "pnpm --filter @mcvis/web dev",
+    "dev:web": "pnpm --filter @mcvis/web dev",
+    "build:web": "pnpm --filter @mcvis/web build",
+    "dev:desktop": "pnpm --filter @mcvis/desktop tauri dev",
+    "build:desktop": "pnpm --filter @mcvis/desktop tauri build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.check.json --noEmit",
+    "mc:assets": "node mc-env/scripts/setup-assets.mjs",
+    "mc:mods": "node mc-env/scripts/scan-mods.mjs --verify-fixtures",
+    "mc:server": "node mc-env/scripts/setup-server.mjs",
+    "mc:verify": "node mc-env/scripts/verify-env.mjs",
+    "mc:samples": "node tools/generate-samples.mjs",
+    "mcp:server": "node tools/mcp-server.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.172.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "fzstd": "^0.1.1",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.172.0"
+  }
+}

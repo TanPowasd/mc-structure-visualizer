@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mcvis/core": ["packages/core/src/index.ts"],
+      "@mcvis/formats": ["packages/formats/src/index.ts"],
+      "@mcvis/mod-loader": ["packages/mod-loader/src/index.ts"],
+      "@mcvis/importers": ["packages/importers/src/index.ts"],
+      "@mcvis/renderer": ["packages/renderer/src/index.ts"],
+      "@mcvis/ui": ["packages/ui/src/index.ts"]
+    }
+  }
+}

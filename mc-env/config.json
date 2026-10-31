@@ -1,0 +1,61 @@
+{
+  "defaultAssetVersion": "1.21.11",
+  "assetVersions": [
+    "1.21.11",
+    "1.20.1"
+  ],
+  "java": {
+    "jdk21": "C:\\Program Files\\Microsoft\\jdk-21.0.6.7-hotspot\\bin\\java.exe",
+    "jdk17": "C:\\Program Files\\Java\\jdk-17\\bin\\java.exe"
+  },
+  "fabric": {
+    "loaderVersion": "0.20.1",
+    "installerVersion": "1.1.2"
+  },
+  "serverProfiles": {
+    "1.21.11-fabric": {
+      "mcVersion": "1.21.11",
+      "loader": "fabric",
+      "javaKey": "jdk21",
+      "host": "127.0.0.1",
+      "port": 25565,
+      "rconPort": 25575,
+      "rconPassword": "mcvis-local-rcon-2026",
+      "memoryMin": "1G",
+      "memoryMax": "3G",
+      "mods": ["fabric-api", "worldedit", "carpet"]
+    },
+    "1.20.1-fabric": {
+      "mcVersion": "1.20.1",
+      "loader": "fabric",
+      "javaKey": "jdk17",
+      "host": "127.0.0.1",
+      "port": 25566,
+      "rconPort": 25576,
+      "rconPassword": "mcvis-local-rcon-2026",
+      "memoryMin": "1G",
+      "memoryMax": "3G",
+      "mods": ["fabric-api", "worldedit", "carpet"]
+    }
+  },
+  "modCompatibilityFixtures": [
+    {
+      "project": "create",
+      "loader": "forge",
+      "mcVersion": "1.20.1",
+      "note": "Forge 1.20.1 flagship mechanical mod (mods.toml + Jar-in-Jar + OBJ/custom models + .nbt schematics)"
+    },
+    {
+      "project": "create",
+      "loader": "neoforge",
+      "mcVersion": "1.21.1",
+      "note": "NeoForge 1.21.x flagship mechanical mod (neoforge.mods.toml + Jar-in-Jar + NeoForge model loaders)"
+    },
+    {
+      "project": "ae2",
+      "loader": "fabric",
+      "mcVersion": "1.20.1",
+      "note": "Fabric tech mod (fabric.mod.json + multipart cable/controller blockstates)"
+    }
+  ]
+}

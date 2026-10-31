@@ -1,0 +1,21 @@
+{
+  "name": "@mcvis/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mcvis/core": "workspace:*",
+    "@mcvis/formats": "workspace:*",
+    "@mcvis/mod-loader": "workspace:*",
+    "@mcvis/importers": "workspace:*",
+    "@mcvis/renderer": "workspace:*",
+    "@mcvis/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

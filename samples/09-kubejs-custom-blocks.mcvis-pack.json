@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "packName": "Custom Blocks Pack",
+  "author": "User",
+  "exportedAt": "2026-10-31T08:55:49.472Z",
+  "blocks": [
+    {
+      "id": "kubejs:void_alloy_casing",
+      "nameZh": "虚空合金机壳",
+      "nameEn": "Void Alloy Casing",
+      "archetype": "directional_machine",
+      "colorHex": "#38bdf8",
+      "renderType": "solid",
+      "lightLevel": 7,
+      "textures": {}
+    },
+    {
+      "id": "kubejs:aether_crystal_glass",
+      "nameZh": "以太水晶玻璃",
+      "nameEn": "Aether Crystal Glass",
+      "archetype": "glass",
+      "colorHex": "#c084fc",
+      "renderType": "translucent",
+      "lightLevel": 12,
+      "textures": {}
+    }
+  ]
+}
