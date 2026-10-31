@@ -521,3 +521,269 @@ input[type='radio'] {
   z-index: 100;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
+
+/* ── Manual editing ──────────────────────────────────── */
+.mcvis-hint {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+
+.mcvis-hud-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 2px;
+  background: var(--border-strong);
+}
+
+.mcvis-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 8px 0 4px;
+}
+
+.mcvis-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.mcvis-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.mcvis-btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.mcvis-btn-grid.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.mcvis-icon-btn {
+  width: 26px;
+  padding: 0;
+}
+
+/* Segmented control */
+.mcvis-seg {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.mcvis-seg .mcvis-btn {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+.mcvis-seg .mcvis-btn:last-child {
+  border-right: none;
+}
+.mcvis-seg .mcvis-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.mcvis-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 10px 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.mcvis-checks label,
+label.mcvis-checks {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+}
+.mcvis-checks input {
+  margin: 2px 0 0;
+}
+
+.mcvis-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.mcvis-picked-actions {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  padding: 8px;
+  margin-bottom: 4px;
+}
+.mcvis-picked-actions b {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Block picker */
+.mcvis-picker {
+  position: relative;
+}
+.mcvis-picker-caption {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mcvis-picker-list {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid #474747;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  padding: 2px 0;
+}
+.mcvis-picker-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.mcvis-picker-item .mcvis-mono {
+  color: var(--text-muted);
+}
+.mcvis-picker-item.hi {
+  background: var(--accent-soft);
+}
+.mcvis-picker-item.hi .mcvis-mono {
+  color: var(--text-secondary);
+}
+
+/* Hotbar */
+.mcvis-hotbar {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 3px;
+  margin-top: 8px;
+}
+.mcvis-hotbar-slot {
+  position: relative;
+  height: 34px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.15;
+  padding: 12px 2px 2px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.mcvis-hotbar-slot:hover {
+  border-color: #4a4a4a;
+  color: var(--text-primary);
+}
+.mcvis-hotbar-slot.active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.mcvis-hotbar-key {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+.mcvis-hotbar-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Block usage list */
+.mcvis-usage {
+  display: flex;
+  flex-direction: column;
+}
+.mcvis-usage-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.mcvis-usage-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.022);
+}
+.mcvis-usage-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.mcvis-usage-row.on {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+.mcvis-usage-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcvis-usage-id {
+  color: var(--text-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Viewport tool status */
+.mcvis-tool-status {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(28, 28, 28, 0.92);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  max-width: 40%;
+}
+.mcvis-tool-status b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.mcvis-tool-status .swatch {
+  color: var(--accent-hover);
+}

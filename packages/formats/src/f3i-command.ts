@@ -1,6 +1,7 @@
 import {
   createEmptyStructure,
   extractModNamespaces,
+  isAirBlock,
   nbtString,
   nbtCompound,
   parseBlockStateString,
@@ -117,6 +118,7 @@ export function exportAsSetblockCommands(
           const idx = reg.blocks[x + z * reg.size.x + y * reg.size.x * reg.size.z]!;
           if (idx === 0) continue;
           const st = reg.palette[idx]!;
+          if (isAirBlock(st.name)) continue;
           const propsKeys = Object.keys(st.properties).sort();
           const propsStr =
             propsKeys.length > 0

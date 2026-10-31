@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
+  BoxSelect,
   Camera,
   ClipboardPaste,
   Code2,
@@ -13,8 +14,10 @@ import {
   Hammer,
   Layers,
   Package,
+  Pipette,
   Play,
   Redo2,
+  Replace,
   RotateCw,
   Search,
   Server,
@@ -29,12 +32,15 @@ import {
   BUILTIN_SAMPLE_SCRIPTS,
   CustomBlockRegistry,
   type CustomBlockArchetype,
+  type BoxRange,
   type UniversalStructureIR,
+  type Vec3,
   VoxelEditorSession,
   buildAiArchitectSystemPrompt,
   calculateBom,
   computeStructureBounds,
   convertStructureVersion,
+  countBlockUsage,
   countStructureStats,
   extractDslFromLlmResponse,
   extractItemsFromBlockEntity,
@@ -74,9 +80,32 @@ import {
   type ViewportProjectionMode
 } from '@mcvis/renderer';
 import type { DiscoveredModpackInstance, HostBridge } from './host-bridge.js';
+import { EditPanel, type ReplaceToolMode } from './EditPanel.js';
+import { COMMON_BLOCKS, DEFAULT_HOTBAR, type CatalogBlock, mergeCatalogs } from './block-catalog.js';
 
 type ActiveTab = 'inspect' | 'bom' | 'mods_custom' | 'importers' | 'dsl_ai' | 'live_server';
-type ToolMode = 'inspect' | 'place' | 'erase';
+type ToolMode = 'inspect' | 'place' | 'erase' | 'replace' | 'select' | 'pick';
+
+const TOOL_KEYS: Record<string, ToolMode> = {
+  v: 'inspect',
+  b: 'place',
+  e: 'erase',
+  r: 'replace',
+  s: 'select',
+  i: 'pick'
+};
+
+const boxFromCorners = (a: Vec3, b: Vec3): BoxRange => ({
+  min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) },
+  max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) }
+});
+
+const isTypingTarget = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+};
 
 export interface WorkbenchAppProps {
   bridge: HostBridge;
@@ -103,7 +132,15 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
   const [toolMode, setToolMode] = useState<ToolMode>('inspect');
-  const [brushBlock, setBrushBlock] = useState('minecraft:copper_bulb[lit=true]');
+  const [brushBlock, setBrushBlock] = useState(DEFAULT_HOTBAR[0]!);
+  const [hotbar, setHotbar] = useState<string[]>(DEFAULT_HOTBAR);
+  const [activeSlot, setActiveSlot] = useState(0);
+  const [selection, setSelection] = useState<BoxRange | null>(null);
+  const selectionAnchorRef = useRef<Vec3 | null>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<Vec3 | null>(null);
+  const [replaceMode, setReplaceMode] = useState<ReplaceToolMode>('connected');
+  const [keepProps, setKeepProps] = useState(true);
+  const [exportSkipAir, setExportSkipAir] = useState(false);
 
   const [slice, setSlice] = useState<SliceConfig>({
     axis: 'y',
@@ -117,9 +154,6 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
   const [picked, setPicked] = useState<PickedVoxelInfo | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Replace state
-  const [replaceFrom, setReplaceFrom] = useState('minecraft:cut_sandstone');
-  const [replaceTo, setReplaceTo] = useState('minecraft:quartz_bricks');
 
   // Mods & Custom Blocks state
   const [mountedRev, setMountedRev] = useState(0);
@@ -458,10 +492,95 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
     ]
   );
 
+  // ── Manual editing ───────────────────────────────────────────
+  /** Applies the side effects every edit shares: re-render, follow canvas growth, toast. */
+  const afterEdit = useCallback(
+    (message: string | null, shift?: Vec3) => {
+      if (shift && (shift.x || shift.y || shift.z)) {
+        controllerRef.current?.shiftView(shift);
+        const mv = (v: Vec3) => ({ x: v.x + shift.x, y: v.y + shift.y, z: v.z + shift.z });
+        setSelection((sel) => (sel ? { min: mv(sel.min), max: mv(sel.max) } : sel));
+        setPicked(null);
+        controllerRef.current?.setHighlightedVoxel(null);
+      }
+      setRenderVersion((v) => v + 1);
+      if (message) notify(message);
+    },
+    [notify]
+  );
+
+  const selectBrush = useCallback(
+    (state: string, slot?: number) => {
+      setBrushBlock(state);
+      if (slot !== undefined) setActiveSlot(slot);
+    },
+    []
+  );
+
+  const assignSlot = useCallback((i: number, state: string) => {
+    setHotbar((hb) => hb.map((s, idx) => (idx === i ? state : s)));
+  }, []);
+
+  const doUndo = useCallback(() => {
+    const tx = editorRef.current?.undo();
+    if (tx) afterEdit(`已撤销：${tx.label}`);
+  }, [afterEdit]);
+
+  const doRedo = useCallback(() => {
+    const tx = editorRef.current?.redo();
+    if (tx) afterEdit(`已重做：${tx.label}`);
+  }, [afterEdit]);
+
   // Pointer click in 3D/2D Viewport
   const pointerDownPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
     pointerDownPos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  /** Where the current tool would act under the cursor (null when nothing is hit). */
+  const resolveToolTarget = (clientX: number, clientY: number) => {
+    const ctrl = controllerRef.current;
+    if (!ctrl) return null;
+    const hit = ctrl.pickVoxel(clientX, clientY);
+    if (hit) return { hit, placePos: hit.adjacentPos, floor: false };
+    // Empty canvas or a gap: fall back to the ground cell so building can start anywhere
+    const floor = ctrl.pickFloorCell(clientX, clientY);
+    if (floor) return { hit: null, placePos: floor, floor: true };
+    return null;
+  };
+
+  const hoverFrame = useRef(0);
+  const handleCanvasPointerMove = (e: React.PointerEvent) => {
+    if (e.buttons !== 0) return; // orbiting
+    const { clientX, clientY } = e;
+    cancelAnimationFrame(hoverFrame.current);
+    hoverFrame.current = requestAnimationFrame(() => {
+      const ctrl = controllerRef.current;
+      if (!ctrl) return;
+      if (toolMode === 'inspect' || toolMode === 'pick') {
+        ctrl.setToolPreview(null);
+        return;
+      }
+      const t = resolveToolTarget(clientX, clientY);
+      if (!t) {
+        ctrl.setToolPreview(null);
+        return;
+      }
+      if (toolMode === 'place') ctrl.setToolPreview(t.placePos, 'place');
+      else if (toolMode === 'erase') ctrl.setToolPreview(t.hit ? t.hit.blockPos : null, 'danger');
+      else if (toolMode === 'replace') ctrl.setToolPreview(t.hit ? t.hit.blockPos : null, 'target');
+      else if (toolMode === 'select') {
+        const cell = t.hit ? t.hit.blockPos : t.placePos;
+        ctrl.setToolPreview(cell, 'target');
+        const anchor = selectionAnchorRef.current;
+        if (anchor) ctrl.setSelectionBox(boxFromCorners(anchor, cell));
+      }
+    });
+  };
+
+  const handleCanvasPointerLeave = () => {
+    cancelAnimationFrame(hoverFrame.current);
+    controllerRef.current?.setToolPreview(null);
   };
 
   const handleCanvasPointerUp = (e: React.PointerEvent) => {
@@ -476,44 +595,134 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
     const session = editorRef.current;
     if (!ctrl || !session) return;
 
-    const hit = ctrl.pickVoxel(e.clientX, e.clientY);
-    if (!hit) {
-      ctrl.setHighlightedVoxel(null);
-      setPicked(null);
+    const target = resolveToolTarget(e.clientX, e.clientY);
+    const hit = target?.hit ?? null;
+
+    // Alt+click is the eyedropper in every tool, like most editors
+    if ((e.altKey || toolMode === 'pick') && hit) {
+      const pickedStr = formatBlockState(hit.state);
+      selectBrush(pickedStr);
+      assignSlot(activeSlot, pickedStr);
+      notify(`已吸取画笔：${vfsRef.current.getBlockDisplayName(hit.state.name)}`);
+      if (toolMode === 'pick') setToolMode('place');
       return;
     }
 
     if (toolMode === 'inspect') {
+      if (!hit) {
+        ctrl.setHighlightedVoxel(null);
+        setPicked(null);
+        return;
+      }
       ctrl.setHighlightedVoxel(hit.blockPos);
       setPicked(hit);
-      if (e.altKey) {
-        const pickedStr = formatBlockState(hit.state);
-        setBrushBlock(pickedStr);
-        notify(`已吸取画笔方块: ${pickedStr}`);
-      }
     } else if (toolMode === 'place') {
-      const changed = session.setBlock(
-        hit.adjacentPos.x,
-        hit.adjacentPos.y,
-        hit.adjacentPos.z,
-        brushBlock,
-        `Place ${brushBlock}`
-      );
-      if (changed) setRenderVersion((v) => v + 1);
+      if (!target) return;
+      const res = session.placeBlock(target.placePos, brushBlock);
+      if (res.changed) afterEdit(null, res.shift);
     } else if (toolMode === 'erase') {
-      const changed = session.setBlock(
-        hit.blockPos.x,
-        hit.blockPos.y,
-        hit.blockPos.z,
-        'minecraft:air',
-        'Erase Block'
-      );
+      if (!hit) return;
+      const changed = session.setBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, 'minecraft:air', 'Erase Block');
       if (changed) {
         ctrl.setHighlightedVoxel(null);
-        setRenderVersion((v) => v + 1);
+        afterEdit(null);
+      }
+    } else if (toolMode === 'replace') {
+      if (!hit) return;
+      // Shift narrows to one block, whatever the mode
+      const mode: ReplaceToolMode = e.shiftKey ? 'single' : replaceMode;
+      let n = 0;
+      if (mode === 'single') n = session.replaceConnected(hit.blockPos, brushBlock, keepProps, 1);
+      else if (mode === 'connected') n = session.replaceConnected(hit.blockPos, brushBlock, keepProps);
+      else n = session.replaceBlock(hit.state.name, brushBlock, { keepProperties: keepProps });
+      if (n > 0) {
+        afterEdit(
+          mode === 'single'
+            ? null
+            : `${vfsRef.current.getBlockDisplayName(hit.state.name)} → ${vfsRef.current.getBlockDisplayName(brushBlock)}：${n} 块`
+        );
+      }
+    } else if (toolMode === 'select') {
+      if (!target) return;
+      const cell = hit ? hit.blockPos : target.placePos;
+      const anchor = selectionAnchorRef.current;
+      if (!anchor) {
+        selectionAnchorRef.current = cell;
+        setSelectionAnchor(cell);
+        setSelection(boxFromCorners(cell, cell));
+      } else {
+        setSelection(boxFromCorners(anchor, cell));
+        selectionAnchorRef.current = null;
+        setSelectionAnchor(null);
       }
     }
   };
+
+  // Keyboard shortcuts for hands-on editing
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
+      const k = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        doUndo();
+        return;
+      }
+      if ((mod && k === 'y') || (mod && k === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        doRedo();
+        return;
+      }
+      if (mod) return;
+      if (k >= '1' && k <= '9') {
+        const i = Number(k) - 1;
+        selectBrush(hotbar[i]!, i);
+        return;
+      }
+      if (TOOL_KEYS[k]) {
+        setToolMode(TOOL_KEYS[k]!);
+        return;
+      }
+      const session = editorRef.current;
+      if (k === 'escape') {
+        selectionAnchorRef.current = null;
+        setSelectionAnchor(null);
+        setSelection(null);
+        controllerRef.current?.setToolPreview(null);
+      } else if ((k === 'delete' || k === 'backspace') && selection && session) {
+        e.preventDefault();
+        const n = session.clearBox(selection.min, selection.max);
+        afterEdit(n > 0 ? `已清空 ${n} 格` : null);
+      } else if (k === 'f' && selection && session) {
+        const n = session.fillBox(selection.min, selection.max, brushBlock, `Fill ${brushBlock}`);
+        afterEdit(n > 0 ? `已填充 ${n} 格` : null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [afterEdit, brushBlock, doRedo, doUndo, hotbar, selectBrush, selection]);
+
+  // Selection box follows state
+  useEffect(() => {
+    controllerRef.current?.setSelectionBox(selection);
+  }, [selection, renderVersion]);
+
+  // Leaving a tool clears its preview; leaving select drops a half-made selection
+  useEffect(() => {
+    controllerRef.current?.setToolPreview(null);
+    if (toolMode !== 'select' && selectionAnchorRef.current) {
+      selectionAnchorRef.current = null;
+      setSelectionAnchor(null);
+    }
+  }, [toolMode]);
+
+  // A new structure starts with a clean selection
+  useEffect(() => {
+    setSelection(null);
+    selectionAnchorRef.current = null;
+    setSelectionAnchor(null);
+  }, [ir]);
 
   const handleExportFormat = async (fmtId: ExportableFormatId) => {
     try {
@@ -522,7 +731,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
       if (fmtId === 'axiom_bp' && controllerRef.current) {
         exportIr.thumbnailPng = await controllerRef.current.captureThumbnailPng();
       }
-      const data = serializeStructure(exportIr, fmtId);
+      const data = serializeStructure(exportIr, fmtId, { skipAir: exportSkipAir });
       const blob =
         typeof data === 'string'
           ? new Blob([data], { type: descriptor.mimeType })
@@ -729,6 +938,41 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
 
   const stats = useMemo(() => countStructureStats(ir), [ir, renderVersion]);
   const bounds = useMemo(() => computeStructureBounds(ir), [ir, renderVersion]);
+
+  // Keep the layer slicer in range when the canvas is trimmed or grown
+  useEffect(() => {
+    setSlice((prev) => {
+      const maxLayer = Math.max(0, bounds.size[prev.axis] - 1);
+      if (prev.maxLayer === maxLayer && prev.layer <= maxLayer) return prev;
+      return { ...prev, maxLayer, layer: Math.min(prev.layer, maxLayer) };
+    });
+  }, [bounds.size.x, bounds.size.y, bounds.size.z]);
+
+  // Blocks offered by the pickers: vanilla registry (when extracted) + what the build uses + built-ins
+  const blockCatalog = useMemo<CatalogBlock[]>(() => {
+    const registry = vfsRef.current.listRegistryBlocks();
+    const reg = ir.regions[0];
+    const used: CatalogBlock[] = reg
+      ? countBlockUsage(reg).map((u) => {
+          const nm = vfsRef.current.getBlockDisplayName(u.name);
+          return { id: u.name, nameZh: nm === u.name ? '' : nm, nameEn: nm === u.name ? '' : nm };
+        })
+      : [];
+    return mergeCatalogs(registry, COMMON_BLOCKS, used);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mountedRev, ir, renderVersion]);
+
+  const blockDisplayName = useCallback(
+    (id: string) => {
+      const base = id.split('[')[0]!;
+      const nm = vfsRef.current.getBlockDisplayName(base);
+      if (nm !== base && !nm.includes(':')) return nm;
+      const fromCatalog = COMMON_BLOCKS.find((b) => b.id === base || b.id === `minecraft:${base}`);
+      return fromCatalog?.nameZh ?? base.replace(/^minecraft:/, '');
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mountedRev]
+  );
   const bom = useMemo(
     () =>
       calculateBom(
@@ -870,6 +1114,9 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
             className="mcvis-canvas-host"
             onPointerDown={handleCanvasPointerDown}
             onPointerUp={handleCanvasPointerUp}
+            onPointerMove={handleCanvasPointerMove}
+            onPointerLeave={handleCanvasPointerLeave}
+            style={{ cursor: toolMode === 'inspect' ? 'default' : 'crosshair' }}
           />
 
           {/* Top-Left Structure Summary HUD */}
@@ -954,45 +1201,38 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
             </div>
 
             <div className="mcvis-hud-bar">
-              <button
-                className={`mcvis-btn ${toolMode === 'inspect' ? 'active' : ''}`}
-                onClick={() => setToolMode('inspect')}
-                title="左键检视方块状态与 NBT（Alt+左键吸取为画笔）"
-              >
-                <Search size={13} />
-                <span>检视</span>
-              </button>
-              <button
-                className={`mcvis-btn ${toolMode === 'place' ? 'active' : ''}`}
-                onClick={() => setToolMode('place')}
-                title="在点击面相邻位置放置画笔方块"
-              >
-                <Hammer size={13} />
-                <span>放置</span>
-              </button>
-              <button
-                className={`mcvis-btn ${toolMode === 'erase' ? 'active' : ''}`}
-                onClick={() => setToolMode('erase')}
-                title="移除点击的方块"
-              >
-                <Trash2 size={13} />
-                <span>清除</span>
-              </button>
+              {(
+                [
+                  ['inspect', '检视', 'V', <Search size={13} key="i" />, '检视方块状态与 NBT'],
+                  ['place', '放置', 'B', <Hammer size={13} key="p" />, '在点击面旁放置画笔方块；点外侧面会自动扩展画布'],
+                  ['erase', '清除', 'E', <Trash2 size={13} key="e" />, '移除点击的方块'],
+                  ['replace', '替换', 'R', <Replace size={13} key="r" />, '把点击的方块换成画笔（按住 Shift 只换一块）'],
+                  ['select', '框选', 'S', <BoxSelect size={13} key="s" />, '点两个角框出选区，再填充 / 清空 / 替换'],
+                  ['pick', '吸取', 'I', <Pipette size={13} key="k" />, '吸取方块作为画笔（任何工具下 Alt+点击也可）']
+                ] as const
+              ).map(([mode, label, key, icon, tip]) => (
+                <button
+                  key={mode}
+                  className={`mcvis-btn ${toolMode === mode ? 'active' : ''}`}
+                  onClick={() => setToolMode(mode)}
+                  title={`${tip}  [${key}]`}
+                >
+                  {icon}
+                  <span>{label}</span>
+                </button>
+              ))}
+              <span className="mcvis-hud-sep" />
               <button
                 className="mcvis-btn"
-                onClick={() => {
-                  if (editorRef.current?.undo()) setRenderVersion((v) => v + 1);
-                }}
-                title="撤销 (Undo)"
+                onClick={doUndo}
+                title="撤销  [Ctrl+Z]"
               >
                 <Undo2 size={13} />
               </button>
               <button
                 className="mcvis-btn"
-                onClick={() => {
-                  if (editorRef.current?.redo()) setRenderVersion((v) => v + 1);
-                }}
-                title="重做 (Redo)"
+                onClick={doRedo}
+                title="重做  [Ctrl+Y]"
               >
                 <Redo2 size={13} />
               </button>
@@ -1005,6 +1245,27 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
               </button>
             </div>
           </div>
+
+          {/* Bottom-left: active tool, brush and what the next click does */}
+          {toolMode !== 'inspect' && (
+            <div className="mcvis-tool-status">
+              <b>
+                {{ place: '放置', erase: '清除', replace: '替换', select: '框选', pick: '吸取', inspect: '检视' }[toolMode]}
+              </b>
+              {(toolMode === 'place' || toolMode === 'replace') && (
+                <span className="swatch">{blockDisplayName(brushBlock)}</span>
+              )}
+              <span>
+                {toolMode === 'place' && '点方块的面放置 · 外侧面自动扩展画布'}
+                {toolMode === 'erase' && '点方块移除'}
+                {toolMode === 'replace' &&
+                  `${{ single: '单个', connected: '相连同类', all: '全部同类' }[replaceMode]} · Shift 只换一块`}
+                {toolMode === 'select' &&
+                  (selectionAnchor ? '点第二个角完成选区' : selection ? 'F 填充 · Delete 清空 · Esc 取消' : '点第一个角')}
+                {toolMode === 'pick' && '点方块吸取为画笔'}
+              </span>
+            </div>
+          )}
 
           {/* Bottom 3-Axis Layer Slicer Dock */}
           <div className="mcvis-slice-dock">
@@ -1223,49 +1484,28 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                   )}
                 </div>
 
-                <div className="mcvis-card">
-                  <div className="mcvis-card-title">画笔与全局批量替换</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
-                      当前放置画笔方块状态
-                    </label>
-                    <input
-                      className="mcvis-input mcvis-mono"
-                      value={brushBlock}
-                      onChange={(e) => setBrushBlock(e.target.value)}
-                    />
-                    <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
-                      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                        全局替换方块
-                      </div>
-                      <input
-                        className="mcvis-input mcvis-mono"
-                        style={{ width: '100%', marginBottom: 6 }}
-                        value={replaceFrom}
-                        onChange={(e) => setReplaceFrom(e.target.value)}
-                        placeholder="源方块 ID (如 minecraft:cobblestone)"
-                      />
-                      <input
-                        className="mcvis-input mcvis-mono"
-                        style={{ width: '100%', marginBottom: 6 }}
-                        value={replaceTo}
-                        onChange={(e) => setReplaceTo(e.target.value)}
-                        placeholder="目标方块状态 (如 minecraft:deepslate_bricks)"
-                      />
-                      <button
-                        className="mcvis-btn primary"
-                        style={{ width: '100%' }}
-                        onClick={() => {
-                          const cnt = editorRef.current?.replaceBlock(replaceFrom, replaceTo, false) ?? 0;
-                          if (cnt > 0) setRenderVersion((v) => v + 1);
-                          notify(`批量替换完成，共更新 ${cnt} 个方块`);
-                        }}
-                      >
-                        执行全局替换
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <EditPanel
+                  session={editorRef.current}
+                  version={renderVersion}
+                  catalog={blockCatalog}
+                  displayName={blockDisplayName}
+                  brush={brushBlock}
+                  setBrush={(v) => selectBrush(v)}
+                  hotbar={hotbar}
+                  activeSlot={activeSlot}
+                  onSelectSlot={(i) => selectBrush(hotbar[i]!, i)}
+                  onAssignSlot={assignSlot}
+                  picked={picked}
+                  selection={selection}
+                  setSelection={setSelection}
+                  replaceMode={replaceMode}
+                  setReplaceMode={setReplaceMode}
+                  keepProps={keepProps}
+                  setKeepProps={setKeepProps}
+                  exportSkipAir={exportSkipAir}
+                  setExportSkipAir={setExportSkipAir}
+                  onEdited={afterEdit}
+                />
               </>
             )}
 
