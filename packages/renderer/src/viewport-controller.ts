@@ -67,7 +67,7 @@ export class StructureViewportController {
       preserveDrawingBuffer: true
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.setClearColor(0x0c1017, 1);
+    this.renderer.setClearColor(0x222222, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.container.appendChild(this.renderer.domElement);
 
@@ -90,7 +90,7 @@ export class StructureViewportController {
     const boxGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.015, 1.015, 1.015));
     this.hoverOutline = new THREE.LineSegments(
       boxGeom,
-      new THREE.LineBasicMaterial({ color: 0x38bdf8 })
+      new THREE.LineBasicMaterial({ color: 0xe0b060 })
     );
     this.hoverOutline.visible = false;
     this.scene.add(this.hoverOutline);
@@ -405,13 +405,13 @@ export class StructureViewportController {
     const maxHoriz = Math.ceil(Math.max(size.x, size.z, 16) / 16) * 16;
 
     // 1x1 block grid
-    const blockGrid = new THREE.GridHelper(maxHoriz, maxHoriz, 0x263244, 0x18202c);
+    const blockGrid = new THREE.GridHelper(maxHoriz, maxHoriz, 0x333333, 0x2a2a2a);
     blockGrid.position.set(maxHoriz / 2, -0.005, maxHoriz / 2);
     this.gridGroup.add(blockGrid);
 
-    // 16x16 Minecraft Chunk Boundary grid (gold/amber engineering lines)
+    // 16x16 Minecraft Chunk Boundary grid (muted brass lines)
     const chunkDivs = Math.max(1, maxHoriz / 16);
-    const chunkGrid = new THREE.GridHelper(maxHoriz, chunkDivs, 0x3b82f6, 0xd97706);
+    const chunkGrid = new THREE.GridHelper(maxHoriz, chunkDivs, 0x5c5c5c, 0x6e5734);
     chunkGrid.position.set(maxHoriz / 2, 0.002, maxHoriz / 2);
     this.gridGroup.add(chunkGrid);
 
@@ -419,7 +419,7 @@ export class StructureViewportController {
     const boundsBox = new THREE.BoxGeometry(size.x, size.y, size.z);
     const boundsEdges = new THREE.LineSegments(
       new THREE.EdgesGeometry(boundsBox),
-      new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.65 })
+      new THREE.LineBasicMaterial({ color: 0x5a5a5a, transparent: true, opacity: 0.7 })
     );
     boundsEdges.position.set(size.x / 2, size.y / 2, size.z / 2);
     this.gridGroup.add(boundsEdges);

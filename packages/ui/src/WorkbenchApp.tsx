@@ -267,7 +267,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
           setRenderVersion(0);
           setPicked(null);
           setIr(incomingIr);
-          setToast(`⚡ ${ev.summary}`);
+          setToast(`${ev.summary}`);
         } catch {
           // ignore malformed incoming schem
         }
@@ -602,7 +602,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
           knownVanillaBlocks: knownVanilla
         });
         setDslCode(executed.cleanedCode);
-        loadNewStructure(executed.ir, `✨ 离线参数化建筑引擎已生成: ${executed.ir.name}`);
+        loadNewStructure(executed.ir, `离线参数化建筑引擎已生成: ${executed.ir.name}`);
         setAiHistory((prev) => [
           {
             id: Date.now(),
@@ -706,7 +706,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
       setDslCode(finalCode);
       loadNewStructure(
         finalIr,
-        `🤖 AI 结构生成成功 (${firstResp.model}${repaired ? ' · 自动自愈' : ''})！`
+        `AI 结构生成成功 (${firstResp.model}${repaired ? ' · 自动自愈' : ''})！`
       );
       setAiHistory((prev) => [
         {
@@ -768,7 +768,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
       {/* Top Studio Bar */}
       <header className="mcvis-topbar">
         <div className="mcvis-brand">
-          <Box size={18} color="#38bdf8" />
+          <Box size={18} color="var(--accent)" />
           <span>MC 结构全生态可视化工作台</span>
           <span className="mcvis-badge">
             {bridge.platform === 'desktop-tauri' ? 'Desktop Native (Tauri v2)' : 'Web Studio'}
@@ -780,9 +780,9 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
             title="点击打开 AI 结构生成与 MCP / API 实时桥接中心"
             style={{
               cursor: 'pointer',
-              border: '1px solid rgba(52, 211, 153, 0.35)',
-              background: mcpConnected ? 'rgba(16, 185, 129, 0.16)' : 'rgba(148, 163, 184, 0.16)',
-              color: mcpConnected ? '#34d399' : '#94a3b8'
+              border: '1px solid var(--border-strong)',
+              background: mcpConnected ? 'var(--ok-soft)' : 'var(--bg-raised)',
+              color: mcpConnected ? 'var(--ok)' : 'var(--text-muted)'
             }}
           >
             {mcpConnected ? '● MCP 桥接就绪' : '○ MCP 离线'}
@@ -790,7 +790,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
         </div>
 
         <div className="mcvis-toolbar-group">
-          <label className="mcvis-btn primary" style={{ cursor: 'pointer' }}>
+          <label className="mcvis-btn" style={{ cursor: 'pointer' }}>
             <FileUp size={14} />
             <span>打开文件 / 模组 / 3D导入</span>
             <input
@@ -893,7 +893,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                     className={`mcvis-badge ${hasAsset ? 'emerald' : 'amber'}`}
                     title={hasAsset ? `已加载 ${mod} 真实资源` : `未挂载 ${mod}.jar，当前启用智能语义几何降级`}
                   >
-                    {hasAsset ? `✓ ${mod}` : `⚡ ${mod} (智能降级)`}
+                    {hasAsset ? `✓ ${mod}` : `${mod} (智能降级)`}
                   </span>
                 );
               })}
@@ -1008,7 +1008,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
 
           {/* Bottom 3-Axis Layer Slicer Dock */}
           <div className="mcvis-slice-dock">
-            <Layers size={15} color="#38bdf8" />
+            <Layers size={15} color="var(--accent)" />
             <select
               className="mcvis-select"
               value={slice.axis}
@@ -1138,7 +1138,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                   </div>
                   {picked ? (
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 13.5, color: '#38bdf8' }}>
+                      <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--info)' }}>
                         {vfsRef.current.getBlockDisplayName(picked.state.name)}
                       </div>
                       <div className="mcvis-mono" style={{ color: 'var(--text-secondary)', margin: '4px 0 8px' }}>
@@ -1165,7 +1165,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                           {Object.entries(picked.state.properties).map(([k, v]) => (
                             <div key={k} className="mcvis-kv-row">
                               <span className="mcvis-mono">{k}</span>
-                              <span className="mcvis-mono" style={{ color: '#fbbf24' }}>{v}</span>
+                              <span className="mcvis-mono" style={{ color: 'var(--warn)' }}>{v}</span>
                             </div>
                           ))}
                         </div>
@@ -1173,7 +1173,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
 
                       {picked.blockEntity && (
                         <div style={{ marginTop: 10 }}>
-                          <div style={{ color: '#34d399', fontSize: 11.5, fontWeight: 600, marginBottom: 4 }}>
+                          <div style={{ color: 'var(--ok)', fontSize: 11.5, fontWeight: 600, marginBottom: 4 }}>
                             方块实体 NBT ({picked.blockEntity.id})
                           </div>
                           {(() => {
@@ -1193,9 +1193,9 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                           <pre
                             className="mcvis-mono"
                             style={{
-                              background: '#090d16',
+                              background: 'var(--bg-code)',
                               padding: 8,
-                              borderRadius: 6,
+                              borderRadius: 3,
                               overflowX: 'auto',
                               maxHeight: 190,
                               margin: 0
@@ -1312,7 +1312,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div className="mcvis-mono" style={{ color: '#38bdf8', fontWeight: 600 }}>
+                        <div className="mcvis-mono" style={{ color: 'var(--info)', fontWeight: 600 }}>
                           {entry.formattedQuantity}
                         </div>
                         <div className="mcvis-mono" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
@@ -1329,7 +1329,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                     {bom.containerItems.map((it) => (
                       <div key={it.itemId} className="mcvis-bom-row">
                         <span>{vfsRef.current.getBlockDisplayName(it.itemId)}</span>
-                        <span className="mcvis-mono" style={{ color: '#34d399' }}>
+                        <span className="mcvis-mono" style={{ color: 'var(--ok)' }}>
                           {it.formattedQuantity} ({it.count})
                         </span>
                       </div>
@@ -1374,12 +1374,12 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                         style={{
                           padding: 8,
                           marginBottom: 8,
-                          borderRadius: 6,
-                          background: 'rgba(245, 158, 11, 0.1)',
-                          border: '1px solid rgba(245, 158, 11, 0.35)'
+                          borderRadius: 3,
+                          background: 'var(--warn-soft)',
+                          border: '1px solid rgba(208, 169, 78, 0.3)'
                         }}
                       >
-                        <div style={{ fontSize: 11.5, color: '#fbbf24', marginBottom: 6 }}>
+                        <div style={{ fontSize: 11.5, color: 'var(--warn)', marginBottom: 6 }}>
                           当前结构含未挂载模组命名空间（已启用零 JAR 语义几何降级）：
                           <span className="mcvis-mono" style={{ marginLeft: 4 }}>
                             {missingNs.join(', ')}
@@ -1417,7 +1417,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                         >
                           {modrinthFetching
                             ? '正在从 Modrinth CDN 拉取模组资源...'
-                            : '☁ 一键从 Modrinth 自动补全缺失模组 JAR'}
+                            : '一键从 Modrinth 自动补全缺失模组 JAR'}
                         </button>
                       </div>
                     );
@@ -1425,7 +1425,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
 
                   {discoveredPacks.length > 0 && (
                     <div style={{ marginTop: 6 }}>
-                      <div style={{ fontSize: 11.5, color: '#34d399', marginBottom: 4 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--ok)', marginBottom: 4 }}>
                         发现本机 MC 环境 / 启动器模组目录:
                       </div>
                       {discoveredPacks.map((pk) => (
@@ -1744,27 +1744,27 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                 <div className="mcvis-card">
                   <div className="mcvis-card-title">
                     <span>AI 建筑师 · 自然语言结构生成与改建</span>
-                    <Sparkles size={14} color="#a855f7" />
+                    <Sparkles size={14} color="var(--text-muted)" />
                   </div>
 
                   {/* Mode Switch: Create vs Modify Live Viewport */}
                   <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                     <button
                       type="button"
-                      className={`mcvis-btn ${aiMode === 'create' ? 'primary' : ''}`}
+                      className={`mcvis-btn ${aiMode === 'create' ? 'active' : ''}`}
                       style={{ flex: 1, justifyContent: 'center', fontSize: 11.5 }}
                       onClick={() => setAiMode('create')}
                     >
-                      ✨ 从零新建结构
+                      从零新建结构
                     </button>
                     <button
                       type="button"
-                      className={`mcvis-btn ${aiMode === 'modify' ? 'primary' : ''}`}
+                      className={`mcvis-btn ${aiMode === 'modify' ? 'active' : ''}`}
                       style={{ flex: 1, justifyContent: 'center', fontSize: 11.5 }}
                       onClick={() => setAiMode('modify')}
                       title={`基于当前 3D 视口结构 (${ir.name}) 进行增量扩建、换材质或加盖屋顶`}
                     >
-                      🛠️ 基于当前视口增量改建
+                      基于当前视口增量改建
                     </button>
                   </div>
 
@@ -1773,37 +1773,37 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                     {(aiMode === 'create'
                       ? [
                           {
-                            tag: '🏯 中式飞檐阁楼',
+                            tag: '中式飞檐阁楼',
                             text: '生成一座 17x15x17 的中式重檐飞檐阁楼，青砖台基、朱红立柱、白墙花窗与暗海晶石屋顶'
                           },
                           {
-                            tag: '🏰 哥特中世纪塔楼',
+                            tag: '哥特中世纪塔楼',
                             text: '建造一座 15x22x15 的中世纪石砖哨塔，内部带螺旋楼梯、彩绘高窗与深板岩锥形塔尖'
                           },
                           {
-                            tag: '🏡 现代极简别墅',
+                            tag: '现代极简别墅',
                             text: '设计一栋 18x11x14 的双层现代极简悬挑玻璃别墅，白混凝土框架、橡木露台与屋顶泳池'
                           },
                           {
-                            tag: '⚙️ 模组能源核心仓',
+                            tag: '模组能源核心仓',
                             text: '构建一座 15x13x15 赛博工业反应堆核心机房，带铜灯泡阵列、观察口与地下管线廊道'
                           },
                           {
-                            tag: '🔭 穹顶星象台',
+                            tag: '穹顶星象台',
                             text: '建造一座直径 15 格的古典石英立柱与青色玻璃半球穹顶星象观测台'
                           }
                         ]
                       : [
                           {
-                            tag: '➕ 加盖飞檐屋顶',
+                            tag: '加盖飞檐屋顶',
                             text: '在当前建筑顶部加盖一层暗海晶石双坡飞檐屋顶，并在四角悬挂灯笼'
                           },
                           {
-                            tag: '🧱 增设庭院围墙与路灯',
+                            tag: '增设庭院围墙与路灯',
                             text: '在当前结构外围扩建一圈深板岩砖矮墙、拱门入口与四角铜灯路灯柱'
                           },
                           {
-                            tag: '🎨 升级石英与海晶灯材质',
+                            tag: '升级石英与海晶灯材质',
                             text: '将当前结构中的普通石头或砂岩替换为石英砖，并在顶部边缘嵌装海晶灯照明带'
                           }
                         ]
@@ -1811,13 +1811,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                       <button
                         key={chip.tag}
                         type="button"
-                        className="mcvis-badge"
-                        style={{
-                          cursor: 'pointer',
-                          border: '1px solid rgba(168, 85, 247, 0.3)',
-                          background: 'rgba(168, 85, 247, 0.1)',
-                          color: '#d8b4fe'
-                        }}
+                        className="mcvis-chip"
                         onClick={() => setAiPrompt(chip.text)}
                       >
                         {chip.tag}
@@ -1850,8 +1844,8 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                         alignItems: 'center'
                       }}
                     >
-                      <span>🔌 多厂商大模型 API 桥接配置 ({aiProvider === 'offline_parametric' ? '离线引擎' : aiModel})</span>
-                      <span className="mcvis-mono" style={{ fontSize: 10.5, color: '#38bdf8' }}>
+                      <span>多厂商大模型 API 桥接配置 ({aiProvider === 'offline_parametric' ? '离线引擎' : aiModel})</span>
+                      <span className="mcvis-mono" style={{ fontSize: 10.5, color: 'var(--info)' }}>
                         {aiApiKey.trim()
                           ? '已填 Key'
                           : aiEnvKeyFlags[aiPresetId] || (aiProvider === 'gemini' && aiEnvKeyFlags.gemini)
@@ -1934,7 +1928,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                               }
                             }}
                           >
-                            💾 保存本地配置
+                            保存本地配置
                           </button>
                         )}
                         {bridge.aiChat && aiProvider !== 'offline_parametric' && (
@@ -1954,13 +1948,13 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                                   messages: [{ role: 'user', content: 'ping' }],
                                   temperature: 0.1
                                 });
-                                notify(`✅ 接口连通正常 (${res.model}): ${res.content.slice(0, 40)}`);
+                                notify(`接口连通正常 (${res.model}): ${res.content.slice(0, 40)}`);
                               } catch (err) {
-                                notify(`❌ 接口连接失败: ${(err as Error).message}`);
+                                notify(`接口连接失败: ${(err as Error).message}`);
                               }
                             }}
                           >
-                            ⚡ 测试 API 连通
+                            测试 API 连通
                           </button>
                         )}
                       </div>
@@ -1996,20 +1990,20 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                             key={item.id}
                             style={{
                               padding: '6px 8px',
-                              borderRadius: 6,
-                              background: 'rgba(15, 23, 42, 0.72)',
-                              border: '1px solid rgba(148, 163, 184, 0.16)',
+                              borderRadius: 3,
+                              background: 'var(--bg-input)',
+                              border: '1px solid var(--border-subtle)',
                               fontSize: 11.5
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontWeight: 600, color: '#e2e8f0' }}>
-                                {item.mode === 'modify' ? '🛠️ 增量' : '✨ 新建'} · {item.snapshotIr.name}
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {item.mode === 'modify' ? '增量' : '新建'} · {item.snapshotIr.name}
                               </span>
                               <button
                                 type="button"
                                 className="mcvis-badge"
-                                style={{ cursor: 'pointer', color: '#38bdf8' }}
+                                style={{ cursor: 'pointer', color: 'var(--info)' }}
                                 onClick={() => {
                                   setDslCode(item.dslCode);
                                   loadNewStructure(item.snapshotIr, `已回滚至历史版本: ${item.snapshotIr.name}`);
@@ -2021,7 +2015,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                             <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 2 }}>
                               {item.prompt}
                             </div>
-                            <div style={{ color: '#94a3b8', fontSize: 10.5, marginTop: 2 }}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 10.5, marginTop: 2 }}>
                               [{item.provider}] {item.explanation}
                             </div>
                           </div>
@@ -2038,8 +2032,8 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                     <span
                       className="mcvis-badge"
                       style={{
-                        background: mcpConnected ? 'rgba(16, 185, 129, 0.18)' : 'rgba(148, 163, 184, 0.16)',
-                        color: mcpConnected ? '#34d399' : '#94a3b8'
+                        background: mcpConnected ? 'var(--ok-soft)' : 'var(--bg-raised)',
+                        color: mcpConnected ? 'var(--ok)' : 'var(--text-muted)'
                       }}
                     >
                       {mcpConnected ? '● 实时同步中' : '○ 未连接'}
@@ -2057,13 +2051,13 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
                         <div className="mcvis-kv-row">
                           <span>HTTP MCP 端点</span>
-                          <span className="mcvis-mono" style={{ fontSize: 11, color: '#38bdf8' }}>
+                          <span className="mcvis-mono" style={{ fontSize: 11, color: 'var(--info)' }}>
                             {ep.httpMcpUrl}
                           </span>
                         </div>
                         <div className="mcvis-kv-row">
                           <span>REST 生成接口</span>
-                          <span className="mcvis-mono" style={{ fontSize: 11, color: '#a855f7' }}>
+                          <span className="mcvis-mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                             {ep.restGenerateUrl}
                           </span>
                         </div>
@@ -2089,7 +2083,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                               notify('已复制 Stdio MCP JSON 配置到剪贴板！');
                             }}
                           >
-                            📋 复制 Stdio MCP 配置
+                            复制 Stdio MCP 配置
                           </button>
                           <button
                             type="button"
@@ -2111,7 +2105,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                               notify('已复制 Streamable HTTP MCP 配置到剪贴板！');
                             }}
                           >
-                            🌐 复制 HTTP MCP 配置
+                            复制 HTTP MCP 配置
                           </button>
                           <button
                             type="button"
@@ -2123,7 +2117,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                               notify('已复制 REST API 生成并推送 3D 视口的 cURL 示例！');
                             }}
                           >
-                            ⚡ 复制 REST API 实时推送 cURL
+                            复制 REST API 实时推送 cURL
                           </button>
                         </div>
                       </div>
@@ -2150,13 +2144,13 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                     <pre
                       className="mcvis-mono"
                       style={{
-                        background: '#090d16',
+                        background: 'var(--bg-code)',
                         padding: 8,
-                        borderRadius: 6,
+                        borderRadius: 3,
                         maxHeight: 110,
                         overflowY: 'auto',
                         fontSize: 10.5,
-                        color: '#34d399',
+                        color: 'var(--ok)',
                         margin: 0
                       }}
                     >
@@ -2205,9 +2199,9 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                       className={`mcvis-badge ${serverOnline ? 'emerald' : ''}`}
                       style={{
                         background: serverOnline
-                          ? 'rgba(16, 185, 129, 0.2)'
-                          : 'rgba(148, 163, 184, 0.16)',
-                        color: serverOnline ? '#34d399' : '#94a3b8'
+                          ? 'var(--ok-soft)'
+                          : 'var(--bg-raised)',
+                        color: serverOnline ? 'var(--ok)' : 'var(--text-muted)'
                       }}
                     >
                       {serverOnline === null ? '检测中...' : serverOnline ? '● 在线运行中' : '○ 未启动'}
@@ -2326,7 +2320,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                   <div className="mcvis-card-title">Carpet 红石刻控制器 (Tick Stepping)</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {[
-                      { label: '❄ 冻结游戏刻', cmd: 'tick freeze' },
+                      { label: '冻结游戏刻', cmd: 'tick freeze' },
                       { label: '▶ 恢复正常刻', cmd: 'tick unfreeze' },
                       { label: '⏭ 单步 1gt', cmd: 'tick step 1' },
                       { label: '⏭ 步进 5gt', cmd: 'tick step 5' }
@@ -2389,9 +2383,9 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                   <pre
                     className="mcvis-mono"
                     style={{
-                      background: '#090d16',
+                      background: 'var(--bg-code)',
                       padding: 8,
-                      borderRadius: 6,
+                      borderRadius: 3,
                       maxHeight: 200,
                       overflowY: 'auto',
                       margin: 0,
