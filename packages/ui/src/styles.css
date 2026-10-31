@@ -787,3 +787,28 @@ label.mcvis-checks {
 .mcvis-tool-status .swatch {
   color: var(--accent-hover);
 }
+
+/* Selection / clipboard transforms */
+.mcvis-subtitle {
+  margin: 10px 0 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.mcvis-icon-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+.mcvis-icon-row .mcvis-btn {
+  justify-content: center;
+  padding: 0;
+}
+.mcvis-icon-row .mcvis-btn {
+  gap: 3px;
+}
+.mcvis-axis-tag {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}

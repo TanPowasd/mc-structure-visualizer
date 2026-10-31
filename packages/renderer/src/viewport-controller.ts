@@ -46,6 +46,8 @@ export class StructureViewportController {
   private previewEdges: THREE.LineSegments;
   private selectionBox: THREE.LineSegments;
   private selectionFill: THREE.Mesh;
+  private pasteGhostEdges: THREE.LineSegments;
+  private pasteGhostFill: THREE.Mesh;
 
   private activeMode: ViewportProjectionMode = '3d_perspective';
   private showTechnicalOverlay = true;
@@ -126,6 +128,20 @@ export class StructureViewportController {
     this.selectionFill.visible = false;
     this.selectionFill.renderOrder = 9;
     this.scene.add(this.selectionBox, this.selectionFill);
+
+    // Paste ghost: where the clipboard would land
+    this.pasteGhostEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+      new THREE.LineBasicMaterial({ color: 0xe8e2d6 })
+    );
+    this.pasteGhostFill = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: 0xe8e2d6, transparent: true, opacity: 0.12, depthWrite: false })
+    );
+    this.pasteGhostEdges.visible = false;
+    this.pasteGhostFill.visible = false;
+    this.pasteGhostFill.renderOrder = 11;
+    this.scene.add(this.pasteGhostEdges, this.pasteGhostFill);
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
     this.resizeObserver.observe(container);
@@ -258,6 +274,23 @@ export class StructureViewportController {
     const sz = box.max.z - box.min.z + 1;
     for (const obj of [this.selectionBox, this.selectionFill]) {
       obj.scale.set(sx + 0.02, sy + 0.02, sz + 0.02);
+      obj.position.set(box.min.x + sx / 2, box.min.y + sy / 2, box.min.z + sz / 2);
+      obj.visible = true;
+    }
+  }
+
+  /** Draws the box the clipboard would occupy if pasted now, or hides it when null. */
+  setPasteGhost(box: { min: Vec3; max: Vec3 } | null): void {
+    if (!box) {
+      this.pasteGhostEdges.visible = false;
+      this.pasteGhostFill.visible = false;
+      return;
+    }
+    const sx = box.max.x - box.min.x + 1;
+    const sy = box.max.y - box.min.y + 1;
+    const sz = box.max.z - box.min.z + 1;
+    for (const obj of [this.pasteGhostEdges, this.pasteGhostFill]) {
+      obj.scale.set(sx + 0.04, sy + 0.04, sz + 0.04);
       obj.position.set(box.min.x + sx / 2, box.min.y + sy / 2, box.min.z + sz / 2);
       obj.visible = true;
     }

@@ -12,6 +12,7 @@ import {
   voxelIndex
 } from './types.js';
 import { getRegionBlock, mergeRegionsToSingle, setRegionBlock } from './structure.js';
+import { type BlockClipboard, type ClipboardTransform, transformClipboard } from './clipboard.js';
 
 export interface VoxelChange {
   x: number;
@@ -241,6 +242,38 @@ function clampBox(reg: StructureRegion, from: Vec3, to: Vec3): BoxRange {
       y: Math.min(reg.size.y - 1, Math.max(from.y, to.y)),
       z: Math.min(reg.size.z - 1, Math.max(from.z, to.z))
     }
+  };
+}
+
+interface VoxelWrite {
+  x: number;
+  y: number;
+  z: number;
+  state: string;
+}
+
+const AIR_STATE_STRING = 'minecraft:air';
+
+const TRANSFORM_LABELS: Record<ClipboardTransform, string> = {
+  rotateCW: 'Rotate Selection CW',
+  rotateCCW: 'Rotate Selection CCW',
+  rotate180: 'Rotate Selection 180',
+  mirrorX: 'Mirror Selection X',
+  mirrorZ: 'Mirror Selection Z',
+  flipY: 'Flip Selection Y'
+};
+
+function boxAt(origin: Vec3, size: Vec3): BoxRange {
+  return {
+    min: { ...origin },
+    max: { x: origin.x + size.x - 1, y: origin.y + size.y - 1, z: origin.z + size.z - 1 }
+  };
+}
+
+function shiftBox(box: BoxRange, d: Vec3): BoxRange {
+  return {
+    min: { x: box.min.x + d.x, y: box.min.y + d.y, z: box.min.z + d.z },
+    max: { x: box.max.x + d.x, y: box.max.y + d.y, z: box.max.z + d.z }
   };
 }
 
@@ -529,6 +562,167 @@ export class VoxelEditorSession {
   expandCanvas(lo: Vec3, hi: Vec3, label = 'Expand Canvas'): Vec3 | null {
     if ([lo.x, lo.y, lo.z, hi.x, hi.y, hi.z].every((v) => v === 0)) return null;
     return this.applyResize(lo, hi, label);
+  }
+
+  /** Copies an inclusive box into a standalone clipboard (block states only). */
+  copyBox(from: Vec3, to: Vec3): BlockClipboard {
+    const reg = this.getPrimaryRegion();
+    const { min, max } = clampBox(reg, from, to);
+    const size: Vec3 = { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
+    const blocks = new Array<string>(size.x * size.y * size.z);
+    for (let y = 0; y < size.y; y++) {
+      for (let z = 0; z < size.z; z++) {
+        for (let x = 0; x < size.x; x++) {
+          blocks[voxelIndex(x, y, z, size)] = formatBlockState(getRegionBlock(reg, min.x + x, min.y + y, min.z + z));
+        }
+      }
+    }
+    return { size, blocks };
+  }
+
+  /**
+   * Pastes a clipboard with its min corner at `origin`. Air in the clipboard is skipped
+   * unless `includeAir`, so pasting never punches holes by default. Parts that land
+   * outside the canvas grow it (same undo step); `shift` is how far old blocks moved.
+   */
+  pasteClipboard(
+    clip: BlockClipboard,
+    origin: Vec3,
+    opts: { includeAir?: boolean; label?: string } = {}
+  ): { changed: number; shift: Vec3; box: BoxRange } {
+    const writes: VoxelWrite[] = [];
+    for (let y = 0; y < clip.size.y; y++) {
+      for (let z = 0; z < clip.size.z; z++) {
+        for (let x = 0; x < clip.size.x; x++) {
+          const state = clip.blocks[voxelIndex(x, y, z, clip.size)]!;
+          if (!opts.includeAir && isAirBlock(parseBlockStateString(state).name)) continue;
+          writes.push({ x: origin.x + x, y: origin.y + y, z: origin.z + z, state });
+        }
+      }
+    }
+    const res = this.applyWrites(writes, opts.label ?? 'Paste');
+    return { ...res, box: shiftBox(boxAt(origin, clip.size), res.shift) };
+  }
+
+  /**
+   * Moves the blocks in a box by `delta` (cut + paste in one step, like //move).
+   * Returns the box's new position.
+   */
+  moveBox(from: Vec3, to: Vec3, delta: Vec3, label = 'Move Selection'): { changed: number; shift: Vec3; box: BoxRange } {
+    const reg = this.getPrimaryRegion();
+    const { min } = clampBox(reg, from, to);
+    const clip = this.copyBox(from, to);
+    const target = { x: min.x + delta.x, y: min.y + delta.y, z: min.z + delta.z };
+    return this.rewriteBox(min, clip, clip, target, label);
+  }
+
+  /**
+   * Rotates or mirrors the blocks of a box in place, keeping its min corner. Rotations
+   * swap the box's x/z size, which can grow the canvas. Returns the new box.
+   */
+  transformBox(from: Vec3, to: Vec3, op: ClipboardTransform, label?: string): { changed: number; shift: Vec3; box: BoxRange } {
+    const reg = this.getPrimaryRegion();
+    const { min } = clampBox(reg, from, to);
+    const clip = this.copyBox(from, to);
+    const next = transformClipboard(clip, op);
+    return this.rewriteBox(min, clip, next, min, label ?? TRANSFORM_LABELS[op]);
+  }
+
+  /** Clears `oldClip` at `oldMin`, then writes `next` (air included) at `target`. */
+  private rewriteBox(
+    oldMin: Vec3,
+    oldClip: BlockClipboard,
+    next: BlockClipboard,
+    target: Vec3,
+    label: string
+  ): { changed: number; shift: Vec3; box: BoxRange } {
+    const writes = new Map<string, VoxelWrite>();
+    for (let y = 0; y < oldClip.size.y; y++) {
+      for (let z = 0; z < oldClip.size.z; z++) {
+        for (let x = 0; x < oldClip.size.x; x++) {
+          const w = { x: oldMin.x + x, y: oldMin.y + y, z: oldMin.z + z, state: AIR_STATE_STRING };
+          writes.set(`${w.x},${w.y},${w.z}`, w);
+        }
+      }
+    }
+    for (let y = 0; y < next.size.y; y++) {
+      for (let z = 0; z < next.size.z; z++) {
+        for (let x = 0; x < next.size.x; x++) {
+          const w = {
+            x: target.x + x,
+            y: target.y + y,
+            z: target.z + z,
+            state: next.blocks[voxelIndex(x, y, z, next.size)]!
+          };
+          writes.set(`${w.x},${w.y},${w.z}`, w);
+        }
+      }
+    }
+    const res = this.applyWrites([...writes.values()], label);
+    return { ...res, box: shiftBox(boxAt(target, next.size), res.shift) };
+  }
+
+  /**
+   * Writes many voxels as one undo step. Writes outside the canvas grow it first
+   * (recorded as a region swap); air writes outside the canvas are dropped.
+   */
+  private applyWrites(writes: VoxelWrite[], label: string): { changed: number; shift: Vec3 } {
+    const reg = this.getPrimaryRegion();
+    const zero: Vec3 = { x: 0, y: 0, z: 0 };
+    const parsed = new Map<string, BlockStateEntry>();
+    const entryOf = (s: string) => {
+      let e = parsed.get(s);
+      if (!e) {
+        e = parseBlockStateString(s);
+        parsed.set(s, e);
+      }
+      return e;
+    };
+    const lo = { ...zero };
+    const hi = { ...zero };
+    const kept: VoxelWrite[] = [];
+    for (const w of writes) {
+      const inside = w.x >= 0 && w.y >= 0 && w.z >= 0 && w.x < reg.size.x && w.y < reg.size.y && w.z < reg.size.z;
+      if (!inside) {
+        if (isAirBlock(entryOf(w.state).name)) continue;
+        lo.x = Math.max(lo.x, -w.x);
+        lo.y = Math.max(lo.y, -w.y);
+        lo.z = Math.max(lo.z, -w.z);
+        hi.x = Math.max(hi.x, w.x - (reg.size.x - 1));
+        hi.y = Math.max(hi.y, w.y - (reg.size.y - 1));
+        hi.z = Math.max(hi.z, w.z - (reg.size.z - 1));
+      }
+      kept.push(w);
+    }
+    const grows = lo.x || lo.y || lo.z || hi.x || hi.y || hi.z;
+    if (!grows) {
+      const changes: VoxelChange[] = [];
+      for (const w of kept) {
+        const prev = formatBlockState(getRegionBlock(reg, w.x, w.y, w.z));
+        const entry = entryOf(w.state);
+        const next = formatBlockState(entry);
+        if (prev === next) continue;
+        setRegionBlock(reg, w.x, w.y, w.z, entry);
+        changes.push({ x: w.x, y: w.y, z: w.z, before: prev, after: next });
+      }
+      if (changes.length > 0) this.pushTransaction({ label, changes });
+      return { changed: changes.length, shift: zero };
+    }
+    const before = cloneRegion(reg);
+    const after = resizeRegion(before, lo, hi);
+    let changed = 0;
+    for (const w of kept) {
+      const x = w.x + lo.x;
+      const y = w.y + lo.y;
+      const z = w.z + lo.z;
+      const entry = entryOf(w.state);
+      if (formatBlockState(getRegionBlock(after, x, y, z)) === formatBlockState(entry)) continue;
+      setRegionBlock(after, x, y, z, entry);
+      changed++;
+    }
+    this.ir.regions = [cloneRegion(after)];
+    this.pushTransaction({ label: `${label} (grow canvas)`, changes: [], swap: { before, after } });
+    return { changed, shift: lo };
   }
 
   undo(): EditTransaction | null {

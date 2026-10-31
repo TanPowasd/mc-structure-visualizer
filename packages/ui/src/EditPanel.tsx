@@ -1,7 +1,25 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowDownUp, BoxSelect, Crop, Eraser, Expand, PaintBucket, Square, Wind } from 'lucide-react';
 import {
+  ArrowDownUp,
+  BoxSelect,
+  ClipboardPaste,
+  Copy,
+  Crop,
+  Eraser,
+  Expand,
+  FlipHorizontal2,
+  FlipVertical2,
+  PaintBucket,
+  RotateCcw,
+  RotateCw,
+  Scissors,
+  Square,
+  Wind
+} from 'lucide-react';
+import {
+  type BlockClipboard,
   type BoxRange,
+  type ClipboardTransform,
   type Vec3,
   VoxelEditorSession,
   computeSolidBounds,
@@ -40,6 +58,16 @@ export interface EditPanelProps {
 
   exportSkipAir: boolean;
   setExportSkipAir: (v: boolean) => void;
+
+  clipboard: BlockClipboard | null;
+  clipboardBlocks: number;
+  pasting: boolean;
+  pasteIncludeAir: boolean;
+  setPasteIncludeAir: (v: boolean) => void;
+  onCopy: (cut: boolean) => void;
+  onStartPaste: () => void;
+  onTransformSelection: (op: ClipboardTransform) => void;
+  onTransformClipboard: (op: ClipboardTransform) => void;
 
   /** Called after the session changed. `shift` is non-zero when the canvas grew on -x/-y/-z. */
   onEdited: (message: string | null, shift?: Vec3) => void;
@@ -215,6 +243,23 @@ export function EditPanel(p: EditPanelProps) {
                 取消选区
               </button>
             </div>
+            <div className="mcvis-subtitle">复制与变换</div>
+            <div className="mcvis-btn-grid">
+              <button className="mcvis-btn" title="复制选区 (Ctrl+C)" onClick={() => p.onCopy(false)}>
+                <Copy size={13} />
+                复制
+              </button>
+              <button className="mcvis-btn" title="复制后清空选区 (Ctrl+X)" onClick={() => p.onCopy(true)}>
+                <Scissors size={13} />
+                剪切
+              </button>
+            </div>
+            <div className="mcvis-icon-row" style={{ marginTop: 6 }}>
+              <TransformButtons onApply={p.onTransformSelection} subject="选区" />
+            </div>
+            <div className="mcvis-hint" style={{ marginTop: 6 }}>
+              方向键水平移动选区内容，PageUp / PageDown 上下移动，按住 Shift 一次移 5 格
+            </div>
           </>
         ) : (
           <div className="mcvis-btn-grid">
@@ -238,6 +283,38 @@ export function EditPanel(p: EditPanelProps) {
           </div>
         )}
       </div>
+
+      {/* ── Clipboard ──────────────────────────────── */}
+      {p.clipboard && (
+        <div className="mcvis-card">
+          <div className="mcvis-card-title">
+            <span>剪贴板</span>
+            <span className="mcvis-hint">{p.pasting ? '点视口放下 · R 旋转 · M 镜像 · Esc 结束' : 'Ctrl+V 粘贴'}</span>
+          </div>
+          <div className="mcvis-kv-row" style={{ marginBottom: 8 }}>
+            <span>内容</span>
+            <span className="mcvis-mono">
+              {p.clipboard.size.x} × {p.clipboard.size.y} × {p.clipboard.size.z} · {p.clipboardBlocks.toLocaleString()} 块
+            </span>
+          </div>
+          <div className="mcvis-icon-row" style={{ marginBottom: 8 }}>
+            <TransformButtons onApply={p.onTransformClipboard} subject="剪贴板" />
+          </div>
+          <label className="mcvis-checks" style={{ margin: "0 0 8px" }}>
+            <input type="checkbox" checked={p.pasteIncludeAir} onChange={(e) => p.setPasteIncludeAir(e.target.checked)} />
+            粘贴时连空气一起覆盖
+          </label>
+          <button
+            className={`mcvis-btn ${p.pasting ? '' : 'primary'}`}
+            style={{ width: '100%' }}
+            onClick={p.onStartPaste}
+            disabled={p.pasting}
+          >
+            <ClipboardPaste size={13} />
+            {p.pasting ? '粘贴中：在视口点击放下' : '粘贴'}
+          </button>
+        </div>
+      )}
 
       {/* ── Quick replace ──────────────────────────── */}
       <div className="mcvis-card">
@@ -567,4 +644,32 @@ function shortName(display: string, id: string): string {
   if (display && display !== id && !display.includes(':')) return display.length > 4 ? display.slice(0, 4) : display;
   const short = id.replace(/^minecraft:/, '').split('[')[0]!;
   return short.length > 7 ? short.slice(0, 7) : short;
+}
+
+const TRANSFORMS: { op: ClipboardTransform; label: string; icon: React.ReactNode; tag?: string }[] = [
+  { op: 'rotateCCW', label: '逆时针旋转 90°', icon: <RotateCcw size={13} /> },
+  { op: 'rotateCW', label: '顺时针旋转 90°', icon: <RotateCw size={13} /> },
+  { op: 'mirrorX', label: '东西镜像（沿 X 轴翻）', icon: <FlipHorizontal2 size={13} />, tag: 'X' },
+  { op: 'mirrorZ', label: '南北镜像（沿 Z 轴翻）', icon: <FlipHorizontal2 size={13} />, tag: 'Z' },
+  { op: 'flipY', label: '上下翻转', icon: <FlipVertical2 size={13} />, tag: 'Y' }
+];
+
+function TransformButtons({ onApply, subject }: { onApply: (op: ClipboardTransform) => void; subject: string }) {
+  return (
+    <>
+      {TRANSFORMS.map((t) => (
+        <button
+          key={t.op}
+          type="button"
+          className="mcvis-btn"
+          title={`${subject}${t.label}，方块朝向一起转`}
+          aria-label={`${subject}${t.label}`}
+          onClick={() => onApply(t.op)}
+        >
+          {t.icon}
+          {t.tag && <span className="mcvis-axis-tag">{t.tag}</span>}
+        </button>
+      ))}
+    </>
+  );
 }

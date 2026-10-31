@@ -5,5 +5,6 @@ export * from './version-compat.js';
 export * from './bom.js';
 export * from './custom-blocks.js';
 export * from './editor.js';
+export * from './clipboard.js';
 export * from './dsl.js';
 export * from './ai-architect.js';

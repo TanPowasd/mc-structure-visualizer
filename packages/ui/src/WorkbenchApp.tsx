@@ -47,6 +47,10 @@ import {
   formatBlockState,
   generateOfflineParametricDsl,
   rotateStructureY90,
+  transformClipboard,
+  countClipboardBlocks,
+  type BlockClipboard,
+  type ClipboardTransform,
   runStructureDslScript,
   sanitizeAndExecuteAiDsl,
   unwrapNbtToJson
@@ -84,7 +88,7 @@ import { EditPanel, type ReplaceToolMode } from './EditPanel.js';
 import { COMMON_BLOCKS, DEFAULT_HOTBAR, type CatalogBlock, mergeCatalogs } from './block-catalog.js';
 
 type ActiveTab = 'inspect' | 'bom' | 'mods_custom' | 'importers' | 'dsl_ai' | 'live_server';
-type ToolMode = 'inspect' | 'place' | 'erase' | 'replace' | 'select' | 'pick';
+type ToolMode = 'inspect' | 'place' | 'erase' | 'replace' | 'select' | 'pick' | 'paste';
 
 const TOOL_KEYS: Record<string, ToolMode> = {
   v: 'inspect',
@@ -141,6 +145,10 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
   const [replaceMode, setReplaceMode] = useState<ReplaceToolMode>('connected');
   const [keepProps, setKeepProps] = useState(true);
   const [exportSkipAir, setExportSkipAir] = useState(false);
+  // Clipboard survives loading another structure, so builds can be stitched together
+  const [clipboard, setClipboard] = useState<BlockClipboard | null>(null);
+  const [pasteIncludeAir, setPasteIncludeAir] = useState(false);
+  const clipboardBlocks = useMemo(() => (clipboard ? countClipboardBlocks(clipboard) : 0), [clipboard]);
 
   const [slice, setSlice] = useState<SliceConfig>({
     axis: 'y',
@@ -531,6 +539,72 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
     if (tx) afterEdit(`已重做：${tx.label}`);
   }, [afterEdit]);
 
+  // ── Clipboard & selection transforms ────────────────────────
+  const copySelection = useCallback(
+    (cut: boolean) => {
+      const session = editorRef.current;
+      if (!session || !selection) {
+        notify('先用 S 框选一个区域');
+        return;
+      }
+      const clip = session.copyBox(selection.min, selection.max);
+      setClipboard(clip);
+      const n = countClipboardBlocks(clip);
+      if (cut) {
+        session.fillBox(selection.min, selection.max, 'minecraft:air', 'Cut Selection');
+        afterEdit(`已剪切 ${n} 块，Ctrl+V 粘贴`);
+      } else {
+        notify(`已复制 ${clip.size.x}×${clip.size.y}×${clip.size.z}（${n} 块），Ctrl+V 粘贴`);
+      }
+    },
+    [afterEdit, notify, selection]
+  );
+
+  const startPaste = useCallback(() => {
+    if (!clipboard) {
+      notify('剪贴板是空的，先框选后 Ctrl+C');
+      return;
+    }
+    setToolMode('paste');
+  }, [clipboard, notify]);
+
+  const transformClip = useCallback(
+    (op: ClipboardTransform) => {
+      setClipboard((c) => (c ? transformClipboard(c, op) : c));
+    },
+    []
+  );
+
+  const transformSelection = useCallback(
+    (op: ClipboardTransform) => {
+      const session = editorRef.current;
+      if (!session || !selection) return;
+      const res = session.transformBox(selection.min, selection.max, op);
+      afterEdit(res.changed > 0 ? null : '选区里没有可变换的方块', res.shift);
+      setSelection(res.box);
+    },
+    [afterEdit, selection]
+  );
+
+  const moveSelection = useCallback(
+    (delta: Vec3) => {
+      const session = editorRef.current;
+      if (!session || !selection) return;
+      const res = session.moveBox(selection.min, selection.max, delta);
+      afterEdit(null, res.shift);
+      setSelection(res.box);
+    },
+    [afterEdit, selection]
+  );
+
+  /** Where a paste would land: clipboard centred on the cursor cell in x/z, bottom at its y. */
+  const pasteOriginFor = (cell: Vec3, clip: BlockClipboard): Vec3 => ({
+    x: cell.x - Math.floor((clip.size.x - 1) / 2),
+    y: cell.y,
+    z: cell.z - Math.floor((clip.size.z - 1) / 2)
+  });
+  const lastPasteCellRef = useRef<Vec3 | null>(null);
+
   // Pointer click in 3D/2D Viewport
   const pointerDownPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
@@ -569,7 +643,17 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
       if (toolMode === 'place') ctrl.setToolPreview(t.placePos, 'place');
       else if (toolMode === 'erase') ctrl.setToolPreview(t.hit ? t.hit.blockPos : null, 'danger');
       else if (toolMode === 'replace') ctrl.setToolPreview(t.hit ? t.hit.blockPos : null, 'target');
-      else if (toolMode === 'select') {
+      else if (toolMode === 'paste') {
+        ctrl.setToolPreview(null);
+        lastPasteCellRef.current = t.placePos;
+        if (clipboard) {
+          const o = pasteOriginFor(t.placePos, clipboard);
+          ctrl.setPasteGhost({
+            min: o,
+            max: { x: o.x + clipboard.size.x - 1, y: o.y + clipboard.size.y - 1, z: o.z + clipboard.size.z - 1 }
+          });
+        }
+      } else if (toolMode === 'select') {
         const cell = t.hit ? t.hit.blockPos : t.placePos;
         ctrl.setToolPreview(cell, 'target');
         const anchor = selectionAnchorRef.current;
@@ -581,6 +665,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
   const handleCanvasPointerLeave = () => {
     cancelAnimationFrame(hoverFrame.current);
     controllerRef.current?.setToolPreview(null);
+    controllerRef.current?.setPasteGhost(null);
   };
 
   const handleCanvasPointerUp = (e: React.PointerEvent) => {
@@ -642,6 +727,14 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
             : `${vfsRef.current.getBlockDisplayName(hit.state.name)} → ${vfsRef.current.getBlockDisplayName(brushBlock)}：${n} 块`
         );
       }
+    } else if (toolMode === 'paste') {
+      if (!target || !clipboard) return;
+      const res = session.pasteClipboard(clipboard, pasteOriginFor(target.placePos, clipboard), {
+        includeAir: pasteIncludeAir
+      });
+      afterEdit(res.changed > 0 ? `已粘贴 ${res.changed} 块` : '这里已经是同样的方块', res.shift);
+      if (res.changed > 0) setSelection(res.box);
+      controllerRef.current?.setPasteGhost(null);
     } else if (toolMode === 'select') {
       if (!target) return;
       const cell = hit ? hit.blockPos : target.placePos;
@@ -674,7 +767,43 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
         doRedo();
         return;
       }
+      if (mod && k === 'c' && selection) {
+        e.preventDefault();
+        copySelection(false);
+        return;
+      }
+      if (mod && k === 'x' && selection) {
+        e.preventDefault();
+        copySelection(true);
+        return;
+      }
+      if (mod && k === 'v') {
+        e.preventDefault();
+        startPaste();
+        return;
+      }
       if (mod) return;
+      // While pasting, R / M turn the clipboard instead of switching tools
+      if (toolMode === 'paste' && (k === 'r' || k === 'm')) {
+        const op: ClipboardTransform =
+          k === 'r' ? (e.shiftKey ? 'rotateCCW' : 'rotateCW') : e.shiftKey ? 'mirrorZ' : 'mirrorX';
+        transformClip(op);
+        return;
+      }
+      const step = e.shiftKey ? 5 : 1;
+      const moveKeys: Record<string, Vec3> = {
+        arrowleft: { x: -step, y: 0, z: 0 },
+        arrowright: { x: step, y: 0, z: 0 },
+        arrowup: { x: 0, y: 0, z: -step },
+        arrowdown: { x: 0, y: 0, z: step },
+        pageup: { x: 0, y: step, z: 0 },
+        pagedown: { x: 0, y: -step, z: 0 }
+      };
+      if (moveKeys[k] && selection && toolMode !== 'paste') {
+        e.preventDefault();
+        moveSelection(moveKeys[k]!);
+        return;
+      }
       if (k >= '1' && k <= '9') {
         const i = Number(k) - 1;
         selectBrush(hotbar[i]!, i);
@@ -685,6 +814,10 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
         return;
       }
       const session = editorRef.current;
+      if (k === 'escape' && toolMode === 'paste') {
+        setToolMode('select');
+        return;
+      }
       if (k === 'escape') {
         selectionAnchorRef.current = null;
         setSelectionAnchor(null);
@@ -701,7 +834,32 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [afterEdit, brushBlock, doRedo, doUndo, hotbar, selectBrush, selection]);
+  }, [
+    afterEdit,
+    brushBlock,
+    copySelection,
+    doRedo,
+    doUndo,
+    hotbar,
+    moveSelection,
+    selectBrush,
+    selection,
+    startPaste,
+    toolMode,
+    transformClip
+  ]);
+
+  // Turning the clipboard while pasting redraws the ghost in place
+  useEffect(() => {
+    const cell = lastPasteCellRef.current;
+    if (toolMode !== 'paste' || !clipboard || !cell) return;
+    const o = pasteOriginFor(cell, clipboard);
+    controllerRef.current?.setPasteGhost({
+      min: o,
+      max: { x: o.x + clipboard.size.x - 1, y: o.y + clipboard.size.y - 1, z: o.z + clipboard.size.z - 1 }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipboard, toolMode]);
 
   // Selection box follows state
   useEffect(() => {
@@ -711,6 +869,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
   // Leaving a tool clears its preview; leaving select drops a half-made selection
   useEffect(() => {
     controllerRef.current?.setToolPreview(null);
+    controllerRef.current?.setPasteGhost(null);
     if (toolMode !== 'select' && selectionAnchorRef.current) {
       selectionAnchorRef.current = null;
       setSelectionAnchor(null);
@@ -1221,6 +1380,16 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                   <span>{label}</span>
                 </button>
               ))}
+              {clipboard && (
+                <button
+                  className={`mcvis-btn ${toolMode === 'paste' ? 'active' : ''}`}
+                  onClick={startPaste}
+                  title="粘贴剪贴板：点击放下，R 旋转，M 镜像  [Ctrl+V]"
+                >
+                  <ClipboardPaste size={13} />
+                  <span>粘贴</span>
+                </button>
+              )}
               <span className="mcvis-hud-sep" />
               <button
                 className="mcvis-btn"
@@ -1250,7 +1419,7 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
           {toolMode !== 'inspect' && (
             <div className="mcvis-tool-status">
               <b>
-                {{ place: '放置', erase: '清除', replace: '替换', select: '框选', pick: '吸取', inspect: '检视' }[toolMode]}
+                {{ place: '放置', erase: '清除', replace: '替换', select: '框选', pick: '吸取', inspect: '检视', paste: '粘贴' }[toolMode]}
               </b>
               {(toolMode === 'place' || toolMode === 'replace') && (
                 <span className="swatch">{blockDisplayName(brushBlock)}</span>
@@ -1261,8 +1430,11 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                 {toolMode === 'replace' &&
                   `${{ single: '单个', connected: '相连同类', all: '全部同类' }[replaceMode]} · Shift 只换一块`}
                 {toolMode === 'select' &&
-                  (selectionAnchor ? '点第二个角完成选区' : selection ? 'F 填充 · Delete 清空 · Esc 取消' : '点第一个角')}
+                  (selectionAnchor ? '点第二个角完成选区' : selection ? 'F 填充 · Delete 清空 · Ctrl+C 复制 · 方向键移动' : '点第一个角')}
                 {toolMode === 'pick' && '点方块吸取为画笔'}
+                {toolMode === 'paste' &&
+                  clipboard &&
+                  `${clipboard.size.x}×${clipboard.size.y}×${clipboard.size.z} · 点击放下 · R 旋转 · M 镜像 · Esc 结束`}
               </span>
             </div>
           )}
@@ -1504,6 +1676,15 @@ export function WorkbenchApp({ bridge }: WorkbenchAppProps) {
                   setKeepProps={setKeepProps}
                   exportSkipAir={exportSkipAir}
                   setExportSkipAir={setExportSkipAir}
+                  clipboard={clipboard}
+                  clipboardBlocks={clipboardBlocks}
+                  pasting={toolMode === 'paste'}
+                  pasteIncludeAir={pasteIncludeAir}
+                  setPasteIncludeAir={setPasteIncludeAir}
+                  onCopy={copySelection}
+                  onStartPaste={startPaste}
+                  onTransformSelection={transformSelection}
+                  onTransformClipboard={transformClip}
                   onEdited={afterEdit}
                 />
               </>
