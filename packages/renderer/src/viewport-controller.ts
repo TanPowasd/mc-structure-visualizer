@@ -75,6 +75,9 @@ export class StructureViewportController {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setClearColor(0x222222, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // The drawing buffer is sized in device pixels (setSize(..., false)); pin the element to its
+    // container so it doesn't render at devicePixelRatio× width and spill over the side panel.
+    Object.assign(this.renderer.domElement.style, { display: 'block', width: '100%', height: '100%' });
     this.container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
