@@ -835,7 +835,8 @@ export async function executeMcpTool(name, args, { core, formats, liveBridge }) 
     if (args.targetMcVersion) {
       ir = core.convertStructureVersion(ir, args.targetMcVersion);
     }
-    const serialized = formats.serializeStructure(ir, args.targetFormat);
+    const fmt = args.targetFormat || args.outputFormat || args.format || path.extname(outPath);
+    const serialized = formats.serializeStructure(ir, fmt);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     if (typeof serialized === 'string') {
       fs.writeFileSync(outPath, serialized, 'utf8');
@@ -845,7 +846,7 @@ export async function executeMcpTool(name, args, { core, formats, liveBridge }) 
     return {
       ok: true,
       outputPath: outPath,
-      targetFormat: args.targetFormat,
+      targetFormat: fmt,
       mcVersion: ir.mcVersion,
       dataVersion: ir.dataVersion
     };

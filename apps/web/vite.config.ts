@@ -243,6 +243,7 @@ interface LiveViewportState {
   schemBase64: string;
   dslCode: string;
   updatedAt: number;
+  pendingMcpPush?: { summary: string; toolName?: string };
 }
 
 let currentLiveState: LiveViewportState | null = null;
@@ -318,7 +319,8 @@ function attachMcMiddleware(middlewares: Connect.Server, devServer?: ViteDevServ
         mcVersion: ir?.mcVersion || '1.21.11',
         schemBase64,
         dslCode: dslCode || '',
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        pendingMcpPush: sseClients.size === 0 ? { summary, toolName } : undefined
       };
       broadcastSseEvent({
         type: 'push_structure',
@@ -484,6 +486,21 @@ function attachMcMiddleware(middlewares: Connect.Server, devServer?: ViteDevServ
         Connection: 'keep-alive'
       });
       res.write(`data: ${JSON.stringify({ type: 'mcp_activity', source: 'bridge', summary: 'MCP & REST 实时桥接通道已连接', timestamp: Date.now() })}\n\n`);
+      if (currentLiveState?.pendingMcpPush && currentLiveState.schemBase64) {
+        const pending = currentLiveState.pendingMcpPush;
+        currentLiveState.pendingMcpPush = undefined;
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'push_structure',
+            source: 'mcp-replay',
+            toolName: pending.toolName,
+            summary: pending.summary,
+            timestamp: currentLiveState.updatedAt,
+            schemBase64: currentLiveState.schemBase64,
+            dslCode: currentLiveState.dslCode
+          })}\n\n`
+        );
+      }
       sseClients.add(res);
       req.on('close', () => {
         sseClients.delete(res);
@@ -502,13 +519,15 @@ function attachMcMiddleware(middlewares: Connect.Server, devServer?: ViteDevServ
         }
         if (req.method === 'POST') {
           const body = await readJsonBody(req);
-          currentLiveState = {
-            name: String(body.name || 'Structure'),
-            mcVersion: String(body.mcVersion || '1.21.11'),
-            schemBase64: String(body.schemBase64 || ''),
-            dslCode: String(body.dslCode || ''),
-            updatedAt: Date.now()
-          };
+          if (!currentLiveState?.pendingMcpPush) {
+            currentLiveState = {
+              name: String(body.name || 'Structure'),
+              mcVersion: String(body.mcVersion || '1.21.11'),
+              schemBase64: String(body.schemBase64 || ''),
+              dslCode: String(body.dslCode || ''),
+              updatedAt: Date.now()
+            };
+          }
           res.end(JSON.stringify({ ok: true }));
           return;
         }
@@ -519,18 +538,21 @@ function attachMcMiddleware(middlewares: Connect.Server, devServer?: ViteDevServ
         const body = await readJsonBody(req);
         const schemBase64 = String(body.schemBase64 || '');
         const dslCode = String(body.dslCode || '');
+        const summary = String(body.summary || `收到外部 MCP 推送结构: ${String(body.name || 'MCP_Structure')}`);
+        const toolName = String(body.toolName || 'live_push');
         currentLiveState = {
           name: String(body.name || 'MCP_Structure'),
           mcVersion: String(body.mcVersion || '1.21.11'),
           schemBase64,
           dslCode,
-          updatedAt: Date.now()
+          updatedAt: Date.now(),
+          pendingMcpPush: sseClients.size === 0 ? { summary, toolName } : undefined
         };
         broadcastSseEvent({
           type: 'push_structure',
           source: String(body.source || 'mcp-stdio'),
-          toolName: String(body.toolName || 'live_push'),
-          summary: String(body.summary || `收到外部 MCP 推送结构: ${currentLiveState.name}`),
+          toolName,
+          summary,
           timestamp: Date.now(),
           schemBase64,
           dslCode
